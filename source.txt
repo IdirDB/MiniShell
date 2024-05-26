@@ -1,0 +1,15 @@
+Shell startup scripts : https://blog.flowblok.id.au/2013-02/shell-startup-scripts.html
+
+Grammaire simplifiée pour le langage shell :
+<command>       ::= <simple-command> | <pipeline>
+<simple-command>::= <command-name> [<arguments>] [<redirection>]
+<pipeline>      ::= <command> '|' <command>
+<arguments>     ::= <word> [<arguments>]
+<redirection>   ::= '<' <file> | '>' <file> | '>>' <file>
+<command-name>  ::= <word>
+<word>          ::= <characters> | <quoted-string>
+<characters>    ::= <character> [<characters>]
+<character>     ::= tout caractère sauf espace, tabulation, saut de ligne, '>', '<', '|'
+<quoted-string> ::= '"' <characters> '"' | "'" <characters> "'"
+<file>          ::= <word>
+
