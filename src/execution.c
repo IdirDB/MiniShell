@@ -7,40 +7,65 @@
 #include <signal.h>
 #include "execution.h"
 
-void exec_cmd(char **cmd, char* path)
-{
-    pid_t pid = 0;
-    int status = 0;
+/**
+ * @brief Executes a command in a child process and waits for its completion in the parent process.
+ * 
+ * @param cmd The command and its arguments as an array of strings.
+ * @param path The PATH environment variable.
+ */
+void exec_cmd(char **cmd, const char* path) {
+    pid_t pid;
 
     pid = fork();
-    if(pid == -1)
+    if (pid == -1) {
         perror("fork");
-    else if(pid > 0)
-    {
-        // On bloque le processus parent jusqu'à ce que l'enfant termine puis
-        // on tue le processus enfant
-        waitpid(pid, &status, 0);
-        kill(pid, SIGTERM);
-    }
-    else{
-        //int execve(const char *pathname, char *const argv[], char *const envp[]);
-        if(execve(rebuild_path(cmd[0], path), cmd, NULL) == -1){
-            perror("execve : ");
+        exit(EXIT_FAILURE);
+    } 
+    
+    if (pid == 0) {
+        // Child process
+        char *full_path = rebuild_path(cmd[0], path);
+        if (full_path == NULL) {
             exit(EXIT_FAILURE);
-        }   
+        }
+        
+        if (execve(full_path, cmd, NULL) == -1) {
+            perror("execve");
+            free(full_path);
+            exit(EXIT_FAILURE);
+        }
+        // Libérer la mémoire allouée pour full_path si execve réussit
+        free(full_path);
+
+        // Terminer le processus enfant proprement
+        exit(EXIT_SUCCESS);
+    } else {
+        // Parent process
+        int status;
+        // Attendre la fin du processus enfant
+        wait(&status);
     }
 }
 
-// Fonction pour reconstruire le chemin complet d'une commande
+
+
+
+/**
+ * @brief Reconstructs the full path of a command by searching through the PATH environment variable.
+ * 
+ * @param cmd The command to find.
+ * @param path_env The PATH environment variable.
+ * @return char* The full path of the command if found, NULL otherwise.
+ */
 char* rebuild_path(const char *cmd, const char *path_env) {
     if (path_env == NULL) {
-        fprintf(stderr, "La variable d'environnement PATH n'est pas définie.\n");
+        fprintf(stderr, "The PATH environment variable is not set.\n");
         return NULL;
     }
 
     char *path_copy = strdup(path_env);
     if (path_copy == NULL) {
-        perror("Erreur de duplication de la variable PATH");
+        fprintf(stderr, "strdup\n");
         return NULL;
     }
 
@@ -50,15 +75,17 @@ char* rebuild_path(const char *cmd, const char *path_env) {
         snprintf(full_path, sizeof(full_path), "%s/%s", token, cmd);
 
         if (access(full_path, X_OK) == 0) {
-            // Le fichier exécutable a été trouvé
-            return strdup(full_path); // Retourner le chemin trouvé
+            // Executable file found
+            free(path_copy);
+            return strdup(full_path);
         }
 
         token = strtok(NULL, ":");
     }
 
-    // La commande n'a pas été trouvée dans les répertoires de PATH
-    fprintf(stderr, "La commande %s n'a pas été trouvée.\n", cmd);
+    // Command not found in any directories of PATH
+    fprintf(stderr, "Command '%s' not found in PATH.\n", cmd);
     free(path_copy);
     return NULL;
 }
+
