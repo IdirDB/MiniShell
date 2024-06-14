@@ -3,18 +3,19 @@
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
+#include <sys/wait.h>
 #include "hashTable.h"
 #include "execution.h"
 #include "parsing.h"
 #include "builtIn.h"
 
-// Function Prototypes
 void initialize_environment(HashTable *table);
 void prompt();
 void handle_input(char *buffer, size_t buffer_size, HashTable *table_env);
 char** splitCmdWithRedirection(char** cmd, int index);
 int thereIsRedirection(char** command_parsed);
 void executeCmd(char** cmd, HashTable *table_env);
+void redirect(char** command_parsed);
 
 /**
  * @brief Main function to run the command-line interface.
@@ -83,56 +84,116 @@ void prompt() {
     write(STDOUT_FILENO, "$> ", 3);
 }
 
-/**
- * @brief Handles the input from the user.
- * 
- * @param buffer The input buffer.
- * @param buffer_size The size of the input buffer.
- * @param table_env The hash table containing environment variables.
- */
 void handle_input(char *buffer, size_t buffer_size, HashTable *table_env) {
-    buffer[strcspn(buffer, "\n")] = '\0'; // Remove trailing newline character
+    buffer[strcspn(buffer, "\n")] = '\0'; // Remove the newline character
     int saved_stdin = dup(STDIN_FILENO);
     int saved_stdout = dup(STDOUT_FILENO);
 
-    // Parse the input buffer into a list of commands
-    char **buffer_parsed = parseLigne(buffer);
+    // cmd1; cmd2; cmd3 -> ["cmd1", "cmd2", "cmd3"]
+    char** buffer_parsed = parseLigne(buffer);
     if (buffer_parsed == NULL) 
-    	exit(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
 
-    for (int i = 0; buffer_parsed[i] != NULL; i++) { 
-    	int file = -1;  
-        char** command_parsed = parseCmd(buffer_parsed[i]);
-        if (command_parsed == NULL){
-        	perror("Error parseCmd");
-        	exit(EXIT_FAILURE);
-        }	
-		int indexFirstRedirection = thereIsRedirection(command_parsed);
-		if(indexFirstRedirection > 0){
-			for(int i = 0; command_parsed[i] != NULL; i++){
-				if(!strcmp(command_parsed[i], ">" )){
-					file = open(command_parsed[i+1], O_WRONLY | O_CREAT| O_TRUNC, 0777);
-					dup2(file, STDOUT_FILENO);
-					close(file);
-				}else if(!strcmp(command_parsed[i], ">>")){
-					file = open(command_parsed[i+1], O_WRONLY | O_CREAT| O_APPEND, 0777);
-					dup2(file, STDOUT_FILENO);
-					close(file); 
-				}else if(!strcmp(command_parsed[i], "<")){
-					file = open(command_parsed[i+1], O_RDONLY, 0777);
-					dup2(file, STDIN_FILENO);
-					close(file);
-				}	
-			}
-			char** cmd = splitCmdWithRedirection(command_parsed, indexFirstRedirection);
-			executeCmd(cmd, table_env);
-			dup2(saved_stdin, STDIN_FILENO);
-			dup2(saved_stdout, STDOUT_FILENO);
-		}else{
-			executeCmd(command_parsed, table_env);
-		}
+    for (int i = 0; buffer_parsed[i] != NULL; i++) {
+        Node* headNodeCmdWithPipe = parseCmdPipe(buffer_parsed[i]);
+        if (headNodeCmdWithPipe == NULL){
+            perror("Error parseCmd");
+            free(buffer_parsed);
+            exit(EXIT_FAILURE);
+        }
+        
+        int first = 1;
+        int inputFd = STDIN_FILENO;
+        
+        while (headNodeCmdWithPipe != NULL) {
+            int pipeFd[2];
+            if (headNodeCmdWithPipe->next != NULL) {
+                if (pipe(pipeFd) == -1) {
+                    perror("pipe");
+                    free(buffer_parsed);
+                    exit(EXIT_FAILURE);
+                }
+            }
+            
+            if (!first) {                    
+                dup2(inputFd, STDIN_FILENO);
+                close(inputFd);
+            }
+            
+            if (headNodeCmdWithPipe->next != NULL) {    
+                dup2(pipeFd[1], STDOUT_FILENO);
+                close(pipeFd[1]);
+            } else {
+                dup2(saved_stdout, STDOUT_FILENO);
+            }
+            
+            char** command_parsed = parseCmd(headNodeCmdWithPipe->cmd);
+            if (command_parsed == NULL) {
+                perror("Error parseCmd");
+                free(buffer_parsed);
+                exit(EXIT_FAILURE);
+            }
+            
+            // If there is a redirection
+            int indexFirstRedirection = thereIsRedirection(command_parsed);        
+            if (indexFirstRedirection > 0) {
+                redirect(command_parsed);
+                char** new_command_parsed = splitCmdWithRedirection(command_parsed, indexFirstRedirection);
+                free(command_parsed);
+                command_parsed = new_command_parsed;
+            }
+
+            // Execute command
+            executeCmd(command_parsed, table_env);
+            free(command_parsed);
+            
+            if (headNodeCmdWithPipe->next != NULL) {
+                inputFd = pipeFd[0];
+            }
+            
+            headNodeCmdWithPipe = headNodeCmdWithPipe->next;
+            if (first) {
+                first = 0;
+            }
+        }
+        
+        dup2(saved_stdin, STDIN_FILENO);
+        dup2(saved_stdout, STDOUT_FILENO);
     }
+
     free(buffer_parsed); 
+}
+
+	
+void redirect(char** command_parsed) {
+    int file = 0;
+    for (int k = 0; command_parsed[k] != NULL; k++) {
+        if (!strcmp(command_parsed[k], ">")) {
+            file = open(command_parsed[k+1], O_WRONLY | O_CREAT | O_TRUNC, 0777);
+            if (file < 0) {
+                perror("open");
+                return;
+            }
+            dup2(file, STDOUT_FILENO);
+            close(file);
+        } else if (!strcmp(command_parsed[k], ">>")) {
+            file = open(command_parsed[k+1], O_WRONLY | O_CREAT | O_APPEND, 0777);
+            if (file < 0) {
+                perror("open");
+                return;
+            }
+            dup2(file, STDOUT_FILENO);
+            close(file);
+        } else if (!strcmp(command_parsed[k], "<")) {
+            file = open(command_parsed[k+1], O_RDONLY, 0777);
+            if (file < 0) {
+                perror("open");
+                return;
+            }
+            dup2(file, STDIN_FILENO);
+            close(file);
+        }
+    }
 }
 
 void executeCmd(char** cmd, HashTable *table_env){
@@ -168,8 +229,4 @@ char** splitCmdWithRedirection(char** cmd, int index){
 	}	
 	return newCmd;
 }		
-
-
-
-
 

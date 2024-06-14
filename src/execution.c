@@ -34,11 +34,10 @@ void exec_cmd(char **cmd, const char* path) {
             free(full_path);
             exit(EXIT_FAILURE);
         }
-        // Libérer la mémoire allouée pour full_path si execve réussit
+        
         free(full_path);
-
-        // Terminer le processus enfant proprement
         exit(EXIT_SUCCESS);
+        
     } else {
         // Parent process
         int status;
@@ -46,9 +45,6 @@ void exec_cmd(char **cmd, const char* path) {
         wait(&status);
     }
 }
-
-
-
 
 /**
  * @brief Reconstructs the full path of a command by searching through the PATH environment variable.

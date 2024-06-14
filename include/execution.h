@@ -3,3 +3,7 @@
 
 void exec_cmd(char **cmd, const char* path);
 char* rebuild_path(const char *cmd, const char *path_env);
+void execPipeIn(char** cmd, const char* path, int* pipefd);
+void execPipeOut(char** cmd, const char* path, int* pipefd);
+
+

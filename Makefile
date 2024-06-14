@@ -2,7 +2,7 @@
 
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -Iinclude
+CFLAGS = -g -Wall -Iinclude
 
 # Source and object directories
 SRCDIR = src

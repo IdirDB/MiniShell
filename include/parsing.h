@@ -1,3 +1,5 @@
+#include "linkedList.h"
+
 typedef struct Env_variable {
 	char* first_part;
 	char* second_part;
@@ -10,6 +12,7 @@ typedef struct Split_str {
 
 char** parseLigne(char* ligne);
 char** parseCmd(char* raw_cmd);
+Node* parseCmdPipe(char* ligne);
 void free_cmd(char* cmd[]);
 Env_variable* split(const char* str);
 

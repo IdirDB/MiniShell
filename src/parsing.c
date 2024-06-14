@@ -4,7 +4,7 @@
 #include "parsing.h"
 
 /* Parsing : cmd1; cmd2; cmd3;
-Example : >ls; cd idir; -> [["ls"], ["cd", "idir"]]
+Example : >ls | cat; cd idir; -> [["ls | cat"], ["cd idir"]]
 */
 char** parseLigne(char* ligne){
     char* token = NULL;
@@ -37,26 +37,46 @@ char** parseLigne(char* ligne){
     listCmd[index] = NULL;
     
     return listCmd;
-}       
+}  
 
+/* Parsing : cmd1; cmd2; cmd3;
+Example : >ls | cat; cd idir; -> [["ls | cat"], ["cd idir"]] -> [[[ls] -> [cat] -> [NULL]], [[cd idir] -> [NULL]]]
+*/
+Node* parseCmdPipe(char* ligne){
+    char* token = NULL;
+    Node* headNode = NULL;
+    char* delim = "|"; //parse on "|"
+    
+    token = strtok(ligne, delim);
+	headNode = (Node*) malloc(sizeof(Node*));
+	headNode->next = NULL;
+	headNode->cmd = strdup(token);
+    while(token != NULL){ 
+		token = strtok(NULL, delim); 
+		if(token != NULL)
+			append(&headNode, strdup(token));  
+    }    
+    return headNode;
+} 
+   
 /* Parsing : cmd1 arg1 arg2 
-Example : echo "idir" -> [["echo"], ["idir"]]
+Example : [echo "idir"] -> [["echo"], ["idir"]]
 */
 char** parseCmd(char* raw_cmd) {
     char* token = NULL;
     char** cmd = NULL;
     size_t index = 0;
-    char* delim = " "; // Split on spaces
-    char* redirectionDroite = ">";
-    char* redirectionGauche = "<";
-    char* redirectionDouble = ">>";  
+    char* delim = " "; // Split on spaces and " "
+    char* redirectionWrite = ">";
+    char* redirectionRead = "<";
+    char* redirectionDoubleWrite = ">>"; 
     
     token = strtok(raw_cmd, delim);
     
     while (token != NULL) {
-        cmd = (char**) realloc(cmd, (index + 1) * sizeof(char*));   
+        cmd = (char**) realloc(cmd, (index + 1) * sizeof(char*)); 
         if (token[0] == '>' && token[1] == '>') {
-            cmd[index] = strdup(redirectionDouble);
+            cmd[index] = strdup(redirectionDoubleWrite);
             if(token[2] != '\0'){
 		        token = token + 2;
 		        index++;
@@ -64,13 +84,13 @@ char** parseCmd(char* raw_cmd) {
 				cmd[index] = strdup(token);
 			}	
         } else if (token[0] == '>' && token[1] != '\0') { 
-        	cmd[index] = strdup(redirectionDroite);
+        	cmd[index] = strdup(redirectionWrite);
             token = token + 1;
             index++;
 			cmd = (char**) realloc(cmd, (index + 1) * sizeof(char*));   
 			cmd[index] = strdup(token);
         } else if (token[0] == '<' && token[1] != '\0'){
-            cmd[index] = strdup(redirectionGauche);
+            cmd[index] = strdup(redirectionRead);
             token = token + 1;
             index++;
 			cmd = (char**) realloc(cmd, (index + 1) * sizeof(char*));   
@@ -89,37 +109,31 @@ char** parseCmd(char* raw_cmd) {
 		cmd[index] = NULL;
 		exit(EXIT_FAILURE);
 	}
-	
-	for(int i = 0; cmd[i] != NULL; i++){
-		printf("%s ", cmd[i]);
-	}
-	printf("\n");
-	
 	return cmd;
-}	
+}
+
+char* protection(char* token){
+
+}
 
 Env_variable* split(const char* str) {
     int len_first_part = 0;
 
-    // Calculate the length of the first part (before the '=' delimiter)
     while (str[len_first_part] != '=' && str[len_first_part] != '\0') {
         len_first_part++;
     }
 
-    // Check if the '=' delimiter is found
     if (str[len_first_part] != '=') {
         fprintf(stderr, "Error: The '=' character was not found in the string.\n");
         exit(EXIT_FAILURE);
     }
 
-    // Allocate memory for the Env_variable structure
     Env_variable* env_variable = (Env_variable*) malloc(sizeof(Env_variable));
     if (env_variable == NULL) {
         fprintf(stderr, "Memory allocation failed for env_variable");
         exit(EXIT_FAILURE);
     }
 
-    // Allocate memory for the first_part and second_part
     env_variable->first_part = (char*) malloc((len_first_part + 1) * sizeof(char));
     if (env_variable->first_part == NULL) {
         fprintf(stderr, "Memory allocation failed for first_part");
@@ -136,11 +150,9 @@ Env_variable* split(const char* str) {
         exit(EXIT_FAILURE);
     }
 
-    // Copy the first part of the string
     strncpy(env_variable->first_part, str, len_first_part);
     env_variable->first_part[len_first_part] = '\0';
     
-    // Copy the second part of the string (after the '=' delimiter)
     strcpy(env_variable->second_part, str + len_first_part + 1);
     env_variable->second_part[len_second_part] = '\0'; 
 
