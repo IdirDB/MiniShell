@@ -4,7 +4,6 @@
 #include <string.h>
 #include <fcntl.h>
 #include <sys/wait.h>
-#include "hashTable.h"
 #include "execution.h"
 #include "parsing.h"
 #include "builtIn.h"
@@ -43,7 +42,6 @@ int main(int argc, char *argv[]) {
     // Command prompt loop
     prompt();
     while (getline(&buffer, &buffer_size, stdin) != -1) {
-        // Handle user input
         handle_input(buffer, buffer_size, table_env);
         prompt();
     }
@@ -91,6 +89,7 @@ void handle_input(char *buffer, size_t buffer_size, HashTable *table_env) {
 
     // cmd1; cmd2; cmd3 -> ["cmd1", "cmd2", "cmd3"]
     char** buffer_parsed = parseLigne(buffer);
+    
     if (buffer_parsed == NULL) 
         exit(EXIT_FAILURE);
 
@@ -127,7 +126,7 @@ void handle_input(char *buffer, size_t buffer_size, HashTable *table_env) {
                 dup2(saved_stdout, STDOUT_FILENO);
             }
             
-            char** command_parsed = parseCmd(headNodeCmdWithPipe->cmd);
+            char** command_parsed = parseCmd(headNodeCmdWithPipe->cmd, table_env);
             if (command_parsed == NULL) {
                 perror("Error parseCmd");
                 free(buffer_parsed);
