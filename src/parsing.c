@@ -1,10 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "parsing.h"
 #include <ctype.h>
+#include "parsing.h"
 
-char* interpretQuotes(const char *input, HashTable *table_env) {
+extern char **environ; 
+
+char* interpretQuotes(const char *input) {
     int inSingleQuotes = 0;
     int inDoubleQuotes = 0;
     int outputIndex = 0; // Index to keep track of position in output buffer
@@ -89,7 +91,7 @@ char* interpretQuotes(const char *input, HashTable *table_env) {
                     envVariable[varNameLength] = '\0';
 
                     // Lookup the variable value
-                    char *result = search(table_env, envVariable);
+                    char *result = getenv(envVariable);
                     printf("%s\n", result);
                     free(envVariable);
 
@@ -279,7 +281,7 @@ Node* parseCmdPipe(char* ligne) {
 /* Parsing : cmd1 arg1 arg2 
 Example : [echo "idir"] -> [["echo"], ["idir"]]
 */
-char** parseCmd(char* cmd, HashTable *table_env) {
+char** parseCmd(char* cmd) {
     char* token = NULL;
     char** tokenList = NULL;
     size_t index = 0;
@@ -377,7 +379,7 @@ char** parseCmd(char* cmd, HashTable *table_env) {
 					tokenList[index++] = restOfToken; // Add the rest of the token to tokenList
 				}
 			} else {
-				tokenList[index++] = strdup(interpretQuotes(strdup(token), table_env));
+				tokenList[index++] = strdup(interpretQuotes(strdup(token)));
 			}
 
             i = strEnd - 1; // Move to the end of the current token

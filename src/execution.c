@@ -7,6 +7,8 @@
 #include <signal.h>
 #include "execution.h"
 
+extern char **environ; 
+
 /**
  * @brief Executes a command in a child process and waits for its completion in the parent process.
  * 
@@ -29,7 +31,7 @@ void exec_cmd(char **cmd, const char* path) {
             exit(EXIT_FAILURE);
         }
         
-        if (execve(full_path, cmd, NULL) == -1) {
+        if (execve(full_path, cmd, environ) == -1) {
             perror("execve");
             free(full_path);
             exit(EXIT_FAILURE);
@@ -63,6 +65,20 @@ char* rebuild_path(const char *cmd, const char *path_env) {
     if (path_copy == NULL) {
         fprintf(stderr, "strdup\n");
         return NULL;
+    }
+    
+    if(cmd[0] == '/'){
+    	return strdup(cmd);
+    }else if(cmd[0] == '.'){
+    	char current_dir[MAX_PATH_LEN];
+    	char full_path[MAX_PATH_LEN];
+    	if (getcwd(current_dir, sizeof(current_dir)) != NULL) {
+    		snprintf(full_path, sizeof(full_path), "%s/%s", current_dir, cmd+2);
+    		return strdup(full_path);
+    	}else{
+    		perror("getcwd");
+        	exit(EXIT_FAILURE);
+    	}
     }
 
     char *token = strtok(path_copy, ":");

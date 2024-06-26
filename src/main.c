@@ -7,14 +7,9 @@
 #include "execution.h"
 #include "parsing.h"
 #include "builtIn.h"
+#include "main.h"
 
-void initialize_environment(HashTable *table);
-void prompt();
-void handle_input(char *buffer, size_t buffer_size, HashTable *table_env);
-char** splitCmdWithRedirection(char** cmd, int index);
-int thereIsRedirection(char** command_parsed);
-void executeCmd(char** cmd, HashTable *table_env);
-void redirect(char** command_parsed);
+extern char **environ; 
 
 /**
  * @brief Main function to run the command-line interface.
@@ -23,32 +18,31 @@ void redirect(char** command_parsed);
  * @param argv Array of command-line arguments.
  * @return int Exit status of the program.
  */
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[], char *envp[]) {
     char *buffer = NULL;
     size_t buffer_size = 1000;
-    HashTable *table_env = create_table(10);
-
+		
     // Initialize environment variables in the hash table
-    initialize_environment(table_env);
+    //initialize_environment(table_env);
 
     // Allocate buffer for user input
     buffer = (char *)malloc(buffer_size * sizeof(char));
     if (buffer == NULL) {
         perror("Malloc failure");
-        free_table(table_env);
+        //free_table(table_env);
         return EXIT_FAILURE;
     }
 
     // Command prompt loop
     prompt();
     while (getline(&buffer, &buffer_size, stdin) != -1) {
-        handle_input(buffer, buffer_size, table_env);
+        handle_input(buffer, buffer_size, envp);
         prompt();
     }
 
     // Free allocated resources
     free(buffer);
-    free_table(table_env);
+    //free_table(table_env);
 
     return 0;
 }
@@ -82,7 +76,7 @@ void prompt() {
     write(STDOUT_FILENO, "$> ", 3);
 }
 
-void handle_input(char *buffer, size_t buffer_size, HashTable *table_env) {
+void handle_input(char *buffer, size_t buffer_size, char *envp[]) {
     buffer[strcspn(buffer, "\n")] = '\0'; // Remove the newline character
     int saved_stdin = dup(STDIN_FILENO);
     int saved_stdout = dup(STDOUT_FILENO);
@@ -126,7 +120,7 @@ void handle_input(char *buffer, size_t buffer_size, HashTable *table_env) {
                 dup2(saved_stdout, STDOUT_FILENO);
             }
             
-            char** command_parsed = parseCmd(headNodeCmdWithPipe->cmd, table_env);
+            char** command_parsed = parseCmd(headNodeCmdWithPipe->cmd);
             if (command_parsed == NULL) {
                 perror("Error parseCmd");
                 free(buffer_parsed);
@@ -143,7 +137,7 @@ void handle_input(char *buffer, size_t buffer_size, HashTable *table_env) {
             }
 
             // Execute command
-            executeCmd(command_parsed, table_env);
+            executeCmd(command_parsed);
             free(command_parsed);
             
             if (headNodeCmdWithPipe->next != NULL) {
@@ -195,11 +189,11 @@ void redirect(char** command_parsed) {
     }
 }
 
-void executeCmd(char** cmd, HashTable *table_env){
+void executeCmd(char** cmd){
 	if (is_built_in(cmd[0])) {
 		exec_built_in(cmd);
 	} else {
-		exec_cmd(cmd, search(table_env, "PATH"));
+		exec_cmd(cmd, getenv("PATH"));
 	}
 }	
 

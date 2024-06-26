@@ -150,3 +150,18 @@ void free_table(HashTable *table) {
     free(table);
 }
 
+/**
+ * @brief Prints the contents of the hash table.
+ * 
+ * @param table The hash table to print.
+ */
+void print_table(HashTable *table) {
+    printf("Hash Table Contents:\n");
+    for (int i = 0; i < table->size; i++) {
+        Entry *entry = table->buckets[i];
+        while (entry) {
+            printf("%s=%s\n", entry->key, entry->value);
+            entry = entry->next;
+        }
+    }
+}

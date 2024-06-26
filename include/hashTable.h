@@ -1,3 +1,6 @@
+#ifndef HASHTABLE_H
+#define HASHTABLE_H
+
 // Structure pour les paires clé-valeur
 typedef struct Entry {
     char *key;
@@ -17,3 +20,6 @@ void insert(HashTable *table, const char *key, const char *value);
 char* search(HashTable *table, const char *key);
 void delete(HashTable *table, const char *key);
 void free_table(HashTable *table);
+void print_table(HashTable *table);
+
+#endif

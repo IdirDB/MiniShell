@@ -2,8 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <errno.h>
 #include "builtIn.h"
+
+extern char **environ; 
 
 /**
  * @brief Checks if a command is a built-in shell command.
@@ -12,7 +13,7 @@
  * @return int 1 if the command is a built-in command, 0 otherwise.
  */
 int is_built_in(const char* cmd) {
-    const char* build_in[] = {"cd", "pwd", "echo", "exit", NULL};
+    const char* build_in[] = {"cd", "pwd", "echo", "exit", "env", "export", NULL};
 
     if (cmd == NULL) {
         return 0;
@@ -88,6 +89,44 @@ void built_in_exit(const char* status_str) {
     exit(exit_status);
 }
 
+void built_in_env(){
+	for (int i = 0; environ[i] != NULL; i++) {
+        printf("%s\n", environ[i]);
+    }
+}
+
+void built_in_export(char** cmd) {
+    char* arg = cmd[1];
+    
+    if (arg == NULL) {
+        // Afficher toutes les variables d'environnement si aucun argument n'est fourni
+        for (int i = 0; environ[i] != NULL; i++) {
+            printf("declare -x %s\n", environ[i]);
+        }
+        return;
+    } else if (arg[0] == '=' && arg[1] == ' ') {
+        // Message d'erreur si l'argument commence par `= `
+        fprintf(stderr, "export: `=': not a valid identifier\n");
+    } else {
+        // Diviser l'argument en nom et valeur de variable d'environnement
+        char* delim = "=";
+        char* envVariableName = strtok(arg, delim);
+        char* envVariableValue = strtok(NULL, delim);
+        
+        
+        if (envVariableName == NULL || envVariableValue == NULL) {
+            fprintf(stderr, "export: Invalid argument format\n");
+            return;
+        }
+        
+        if (setenv(envVariableName, envVariableValue, 1) != 0) {
+            perror("setenv");
+            fprintf(stderr, "export: Failed to set environment variable\n");
+    	}
+	}	
+}	
+
+
 /**
  * @brief Executes a built-in shell command.
  * 
@@ -107,6 +146,10 @@ void exec_built_in(char **built_in) {
         built_in_echo(built_in[1]);
     } else if (strcmp(built_in[0], "exit") == 0) {
         built_in_exit(built_in[1]);
+    } else if (strcmp(built_in[0], "env") == 0) {
+    	built_in_env();
+    } else if (strcmp(built_in[0], "export") == 0) {
+    	built_in_export(built_in);
     } else {
         fprintf(stderr, "Error: Unknown built-in command '%s'.\n", built_in[0]);
     }
