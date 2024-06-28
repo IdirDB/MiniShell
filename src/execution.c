@@ -6,16 +6,23 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include "execution.h"
-
-extern char **environ; 
+#include "environ.h"
 
 /**
- * @brief Executes a command in a child process and waits for its completion in the parent process.
- * 
- * @param cmd The command and its arguments as an array of strings.
- * @param path The PATH environment variable.
+ * @brief Exécute une commande externe avec une création de processus en utilisant fork().
+ *
+ * Cette fonction crée un processus enfant à l'aide de fork() pour exécuter une commande externe spécifiée
+ * par "cmd". Elle utilise "execve" pour remplacer l'image du processus enfant avec celui du programme
+ * spécifié par "full_path", "cmd" et environ.
+ *
+ * @param cmd Tableau de chaînes de caractères représentant la commande à exécuter et ses arguments.
+ * @param path Chemin d'accès pour rechercher le programme à exécuter.
+ *
+ * @note execCmdWithFork utilise la fonction "rebuild_path" pour reconstruit le chemin complet d'un programme exécutable à partir de son nom de 
+ * de commande.
  */
-void exec_cmd(char **cmd, const char* path) {
+void 
+execCmdWithFork(char **cmd, const char* path) {
     pid_t pid;
 
     pid = fork();
@@ -25,7 +32,6 @@ void exec_cmd(char **cmd, const char* path) {
     } 
     
     if (pid == 0) {
-        // Child process
         char *full_path = rebuild_path(cmd[0], path);
         if (full_path == NULL) {
             exit(EXIT_FAILURE);
@@ -41,19 +47,22 @@ void exec_cmd(char **cmd, const char* path) {
         exit(EXIT_SUCCESS);
         
     } else {
-        // Parent process
         int status;
-        // Attendre la fin du processus enfant
         wait(&status);
     }
 }
 
 /**
- * @brief Reconstructs the full path of a command by searching through the PATH environment variable.
- * 
- * @param cmd The command to find.
- * @param path_env The PATH environment variable.
- * @return char* The full path of the command if found, NULL otherwise.
+ * @brief Reconstruit le chemin complet d'un programme exécutable à partir de son nom de commande.
+ *
+ * Cette fonction recherche le programme "cmd"` dans les répertoires listés dans "path_env".
+ * Si "path_env" est NULL, elle affiche une erreur.
+ * Elle gère également les cas où "cmd" commence par '/' ou '.' pour spécifier un chemin absolu ou relatif.
+ *
+ * @param cmd Le nom de la commande ou le chemin relatif/absolu du programme.
+ * @param path_env La chaîne de caractères représentant la variable d'environnement PATH.
+ *
+ * @return Le chemin complet de l'exécutable trouvé, ou NULL en cas d'erreur ou si le programme n'est pas trouvé.
  */
 char* rebuild_path(const char *cmd, const char *path_env) {
     if (path_env == NULL) {
@@ -95,9 +104,28 @@ char* rebuild_path(const char *cmd, const char *path_env) {
         token = strtok(NULL, ":");
     }
 
-    // Command not found in any directories of PATH
     fprintf(stderr, "Command '%s' not found in PATH.\n", cmd);
     free(path_copy);
     return NULL;
+}
+
+/**
+ * @brief Exécute une commande.
+ *
+ * Cette fonction détermine si la commande spécifiée par (cmd[0]) est une commande intégrée
+ * ou une commande externe. Si c'est une commande intégrée, elle est exécutée directement
+ * avec "execBuiltIn". Sinon, elle est exécutée en créant un nouveau processus avec "execCmdWithFork".
+ *
+ * @param cmd Tableau de chaînes de caractères représentant la commande à exécuter et ses arguments.
+ *
+ * @note Cette fonction utilise la fonction "isBuiltIn" pour vérifier si la commande est intégrée.
+ */
+void 
+executeCmd(char** cmd){
+	if (isBuiltIn(cmd[0])) {
+		execBuiltIn(cmd);
+	} else {
+		execCmdWithFork(cmd, getenv("PATH"));
+	}
 }
 

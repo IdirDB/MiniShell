@@ -3,16 +3,21 @@
 #include <string.h>
 #include <ctype.h>
 #include "parsing.h"
+#include "environ.h"
 
-extern char **environ; 
-
+/**
+ * Interprète les tokens, traite les séquences d'échappement et gère les variables d'environnement.
+ * 
+ * @param input Le token d'entré à interpréter.
+ * @return Le token interprèté.
+ */
 char* interpretQuotes(const char *input) {
     int inSingleQuotes = 0;
     int inDoubleQuotes = 0;
-    int outputIndex = 0; // Index to keep track of position in output buffer
-    int outputCapacity = 256; // Initial capacity for the output buffer
+    int outputIndex = 0; 
+    int outputCapacity = 256; 
 
-    // Buffer to store the interpreted output
+    // buffer pour stocker la sortie interprétée
     char *output = calloc(outputCapacity, sizeof(char));
     if (output == NULL) {
         fprintf(stderr, "Memory allocation failed.\n");
@@ -20,12 +25,11 @@ char* interpretQuotes(const char *input) {
     }
 
     int len = strlen(input);
-    printf("%s\n", input);
     
     for (int i = 0; i < len; i++) {
         char currentChar = input[i];
 
-        // Check if we need to expand the output buffer
+        // Check si on doit étendre output buffer
         if (outputIndex >= outputCapacity - 1) {
             outputCapacity *= 2;
             output = realloc(output, outputCapacity * sizeof(char));
@@ -42,10 +46,12 @@ char* interpretQuotes(const char *input) {
             inDoubleQuotes = !inDoubleQuotes;
             continue;
         } else {
+        	// Tout est littéral.
             if (inSingleQuotes) {
-                output[outputIndex++] = currentChar; // Inside single quotes: everything is literal
-            } else if (inDoubleQuotes) {
-                if (currentChar == '\\') { // Inside double quotes: handle escape sequences and variables
+                output[outputIndex++] = currentChar;
+            // Interprétation des caractères spéciaux     
+            } else {
+                if (currentChar == '\\') { 
                     if (i + 1 < len) {
                         i++;
                         switch (input[i]) {
@@ -66,21 +72,18 @@ char* interpretQuotes(const char *input) {
                                 break;
                             default:
                                 output[outputIndex++] = '\\';
-                                printf("%d", outputIndex);
                                 break;
                         }
                     }
+                    // Prendre en compte les variables d'environnement
                 } else if (currentChar == '$') {
-                    // Handle environment variables
                     int envVariableBegin = i + 1;
                     int envVariableEnd = envVariableBegin;
 
-                    // Find the end of the variable name
                     while (envVariableEnd < len && (isalnum(input[envVariableEnd]) || input[envVariableEnd] == '_')) {
                         envVariableEnd++;
                     }
-
-                    // Extract the variable name
+				
                     int varNameLength = envVariableEnd - envVariableBegin;
                     char *envVariable = malloc((varNameLength + 1) * sizeof(char));
                     if (envVariable == NULL) {
@@ -90,16 +93,13 @@ char* interpretQuotes(const char *input) {
                     strncpy(envVariable, input + envVariableBegin, varNameLength);
                     envVariable[varNameLength] = '\0';
 
-                    // Lookup the variable value
                     char *result = getenv(envVariable);
-                    printf("%s\n", result);
                     free(envVariable);
 
-                    // Append the result to the output if found
                     if (result != NULL) {
                         int resultLen = strlen(result);
                         for (int j = 0; j < resultLen; j++) {
-                            // Check if we need to expand the output buffer
+							// Check si on doit étendre output buffer
                             if (outputIndex >= outputCapacity - 1) {
                                 outputCapacity *= 2;
                                 output = realloc(output, outputCapacity * sizeof(char));
@@ -108,47 +108,45 @@ char* interpretQuotes(const char *input) {
                                     exit(1);
                                 }
                             }
-                            printf("%d : %s\n", outputIndex, output);
                             output[outputIndex++] = result[j];
                         }
                     } else {
-                        // If the variable is not found, we should add the original variable string
+                        // Si ce n'est pas une variable globale
                         output[outputIndex++] = '$';
                         for (int k = envVariableBegin; k < envVariableEnd; k++) {
                             output[outputIndex++] = input[k];
                         }
                     }
-
-                    // Move the index to the end of the variable name
                     i = envVariableEnd - 1;
                 } else {
-                    // Normal character inside double quotes
-                    printf("%d** : %c\n", outputIndex, currentChar);
                     output[outputIndex++] = currentChar;
                 }
-            } else {
-                // Outside of any quotes: treat characters normally
-                output[outputIndex++] = currentChar;
-            }
-        }
-    }
+        	}
+    	}
+	}
+	
+	//Pour marquer la fin de output
+	output[outputIndex] = '\0';
 
-    // Null-terminate the output string
-    output[outputIndex] = '\0';
-
-    // Resize output to fit the actual size
-    output = realloc(output, (outputIndex + 1) * sizeof(char));
-    if (output == NULL) {
-        fprintf(stderr, "Memory allocation failed.\n");
-        exit(1);
-    }
-
-    return output;
+	return output;
 }
 
-/* Parsing : cmd1; cmd2; cmd3;
-Example : >ls | cat; cd idir; -> [["ls | cat"], ["cd idir"]]
-*/
+/**
+ * @brief Parse une ligne de commande en une liste de commandes séparées par le délimiteur ';'.
+ *
+ * Cette fonction prend une chaîne de caractères "ligne" représentant une série de commandes
+ * séparées par le délimiteur ';'. Elle découpe la chaîne en tokens individuels représentant
+ * chaque commande et les stocke dans un tableau de chaînes de caractères "listCmd", le tableau 
+ * est terminé par NULL.
+ *
+ * @param ligne La chaîne de caractères représentant la ligne de commande à analyser.
+ * @return Un tableau dynamique de chaînes de caractères contenant les commandes séparées, NULL en cas d'erreur.
+ *
+ * @note ';' peut être échappé avec '\\' pour être traités littéralement.
+ *
+ * Exemple : 
+ * buffer = "cmd1 | cmd2; cmd3" -> bufferParsed = ["cmd1 | cmd2", "cmd3"].
+ */
 char** parseLigne(char* ligne) {
     char* start = ligne;
     char* end = ligne;
@@ -157,11 +155,11 @@ char** parseLigne(char* ligne) {
     char delim = ';';
 
     while (*end != '\0'){
+    	// Si ';' est échappé 
         if (*end == '\\' && *(end + 1) == delim) {
-            // Skip the escaped delimiter
             memmove(end, end + 1, strlen(end));
+        // Si ';' est pas échappé 
         } else if (*end == delim) {
-            // Found a delimiter
             listCmd = (char**) realloc(listCmd, (index + 1) * sizeof(char*));
             if (listCmd == NULL) {
                 fprintf(stderr, "Memory allocation failed");
@@ -172,13 +170,13 @@ char** parseLigne(char* ligne) {
                 fprintf(stderr, "Memory allocation failed");
                 exit(EXIT_FAILURE);
             }
-            start = end + 1; // Move to the next character after the delimiter
+            start = end + 1; 
             index++;
         }
         end++;
     }
 
-    // Add the last token
+    // Ajoute le dernier token à listCmd
     listCmd = (char**) realloc(listCmd, (index + 1) * sizeof(char*));
     if (listCmd == NULL) {
         fprintf(stderr, "Memory allocation failed");
@@ -191,7 +189,7 @@ char** parseLigne(char* ligne) {
     }
     index++;
 
-    // Add NULL at the end 
+    // Ajoute NULL pour terminer listCmd 
     listCmd = (char**) realloc(listCmd, (index + 1) * sizeof(char*));
     if (listCmd == NULL) {
         fprintf(stderr, "Memory allocation failed");
@@ -202,9 +200,21 @@ char** parseLigne(char* ligne) {
     return listCmd;
 }  
 
-/* Parsing : cmd1; cmd2; cmd3;
-Example : >ls | cat; cd idir; -> [["ls | cat"], ["cd idir"]] -> [[[ls] -> [cat] -> [NULL]], [[cd idir] -> [NULL]]]
-*/
+/**
+ * @brief Parse une ligne de commande pour la transformer en pipeline.
+ *
+ * Cette fonction prend une chaîne de caractères "ligne" représentant une série de commandes séparées par '|' ou pas.
+ * Elle découpe la chaîne en commandes individuelles et les organise dans une liste chaînée de structures "Node".
+ *
+ * @param ligne La chaîne de caractères représentant la ligne de commande à analyser.
+ * @return Un pointeur vers le premier nœud de la liste chaînée "Node" contenant les commandes séparées, NULL en cas d'erreur.
+ *
+ * @note Les délimiteurs peuvent être échappés avec '\\' pour être traités littéralement.
+ *
+ * Example :
+ * bufferParsed = ["cmd1 | cmd2", "cmd3"] -> commandParsed = [linkedList(["cmd1"] -> ["cmd2"] -> [NULL]), linkedList(["cmd3"] -> [NULL])]
+ */
+
 Node* parseCmdPipe(char* ligne) {
     char* start = ligne;
     char* end = ligne;
@@ -214,10 +224,10 @@ Node* parseCmdPipe(char* ligne) {
 
     while (*end != '\0') {
         if (*end == '\\' && *(end + 1) == delim) {
-            // Skip the escaped delimiter
+            // Si '|' est échappé 
             memmove(end, end + 1, strlen(end));
         } else if (*end == delim) {
-            // Found a delimiter
+            // Si '|' est pas échappé 
             char* cmd = strndup(start, end - start);
             if (cmd == NULL) {
                 fprintf(stderr, "Memory allocation failed");
@@ -248,7 +258,7 @@ Node* parseCmdPipe(char* ligne) {
         end++;
     }
 
-    // Add the last command
+    // Ajoute le dernier token à listCmd
     if (*start != '\0') {
         char* cmd = strdup(start);
         if (cmd == NULL) {
@@ -278,15 +288,30 @@ Node* parseCmdPipe(char* ligne) {
     return headNode;
 }
   
-/* Parsing : cmd1 arg1 arg2 
-Example : [echo "idir"] -> [["echo"], ["idir"]]
-*/
+/**
+ * @brief Parse une ligne de commande en tokens en tenant compte des guillemets simples et doubles.
+ *
+ * Cette fonction prend une chaîne de caractères "cmd" représentant une ligne de commande et la découpe en tokens.
+ * Les tokens sont séparés par des espaces mais les guillemets simples et doubles peuvent être utilisés pour encapsuler
+ * des tokens contenant des espaces sans qu'ils ne soient divisés. Les redirections de fichiers vers et depuis des commandes sont
+ * également détectées et gérées.
+ *
+ * @param cmd La chaîne de caractères représentant la ligne de commande à analyser.
+ * @return Un tableau de chaînes de caractères "tokenList" contenant les tokens extraits, NULL en cas d'erreur.
+ *
+ * @note Les redirections de fichiers détectées incluent '>', '>>' pour l'écriture et '<' pour la lecture.
+ *
+ * Exemple :
+ * Si cmd1 = echo "Hello" "World" -> cmdParsed = ["echo", "Hello", " ", "World", NULL]
+ * Si echo "Hello" >a.txt -> cmdParsed = ["echo", "Hello", " ", ">", "a.txt"]
+ */
+
 char** parseCmd(char* cmd) {
     char* token = NULL;
     char** tokenList = NULL;
     size_t index = 0;
-    int simpleQuoteMode = 0;
-    int doubleQuoteMode = 0;
+    size_t simpleQuoteMode = 0;
+    size_t doubleQuoteMode = 0;
     size_t length = strlen(cmd);
     char* redirectionWrite = ">";
     char* redirectionRead = "<";
@@ -295,161 +320,104 @@ char** parseCmd(char* cmd) {
     size_t strEnd = 0;
 
     for (size_t i = 0; i < length; i++) {
-    	//The begening of a new token
+    	//Le début d'un token
         if (cmd[i] != ' ') { 
             strBegin = i;
-            strEnd = strBegin;
-            
+            strEnd = strBegin + 1;
             if (cmd[i] == '\'') {
                 simpleQuoteMode = !simpleQuoteMode;
-                strEnd++;
             } else if (cmd[i] == '\"') {
                 doubleQuoteMode = !doubleQuoteMode;
-                strEnd++;
             } 
             
-            if (simpleQuoteMode) {
-                while (strEnd < length && cmd[strEnd] != '\'') {
-                    strEnd++;
-                }
-                strEnd++;
-                simpleQuoteMode = !simpleQuoteMode;
-            } else if (doubleQuoteMode) {
-                while (strEnd < length && cmd[strEnd] != '\"') {
-                    strEnd++;
-                }
-                strEnd++;
-                doubleQuoteMode = !doubleQuoteMode;
-            } else {
-                while (strEnd < length && !isspace(cmd[strEnd])) {
-                    strEnd++;
-                }
+            while (strEnd < length && !isspace(cmd[strEnd])) {
+		        if (simpleQuoteMode) {
+		            while (strEnd < length && cmd[strEnd] != '\'') {
+		                strEnd++;
+		            }
+		            strEnd++;
+		            simpleQuoteMode = !simpleQuoteMode;
+		        } else if (doubleQuoteMode) {
+		            while (strEnd < length && cmd[strEnd] != '\"') {
+		                strEnd++;
+		            }
+		            strEnd++;
+		            doubleQuoteMode = !doubleQuoteMode;
+		        }else{
+		        	strEnd++;
+		        }
            	}	
-
-            // Allocate memory for the token
+           	
             token = (char*) malloc((strEnd - strBegin) * sizeof(char));
             if (token == NULL) {
                 fprintf(stderr, "Memory allocation failed\n");
                 exit(EXIT_FAILURE);
             }
 
-            // Copy the token
             strncpy(token, cmd + strBegin, strEnd - strBegin);
             token[strEnd - strBegin] = '\0';
 
-            // Add the token to tokenList
             tokenList = (char**) realloc(tokenList, (index + 1) * sizeof(char*));
             if (tokenList == NULL) {
                 fprintf(stderr, "Memory allocation failed\n");
                 exit(EXIT_FAILURE);
             }
 
-            // Check for redirections and handle them
+            // Check les redirections et les prendre en compte
 			if (token[0] == '>' && token[1] == '>') {
-				tokenList[index] = strdup(redirectionDoubleWrite);
+				tokenList[index++] = strdup(redirectionDoubleWrite);
 				if (token[2] != '\0') {
-					char* restOfToken = strdup(token + 2); // Copy the rest of the token
+					char* restOfToken = strdup(token + 2); 
 					tokenList = (char**) realloc(tokenList, (index + 2) * sizeof(char*));
 					if (tokenList == NULL) {
 						fprintf(stderr, "Memory allocation failed\n");
 						exit(EXIT_FAILURE);
 					}
-					tokenList[index++] = restOfToken; // Add the rest of the token to tokenList
+					tokenList[index++] = restOfToken; 
 				}
 			} else if (token[0] == '>' && token[1] != '\0') {
-				tokenList[index] = strdup(redirectionWrite);
+				tokenList[index++] = strdup(redirectionWrite);
 				if (token[1] != '\0') {
-					char* restOfToken = strdup(token + 1); // Copy the rest of the token
+					char* restOfToken = strdup(token + 1); 
 					tokenList = (char**) realloc(tokenList, (index + 2) * sizeof(char*));
 					if (tokenList == NULL) {
 						fprintf(stderr, "Memory allocation failed\n");
 						exit(EXIT_FAILURE);
 					}
-					tokenList[++index] = restOfToken; // Add the rest of the token to tokenList
+					tokenList[index++] = restOfToken; 
 				}
 			} else if (token[0] == '<' && token[1] != '\0') {
-				tokenList[index] = strdup(redirectionRead);
+				tokenList[index++] = strdup(redirectionRead);
 				if (token[1] != '\0') {
-					char* restOfToken = strdup(token + 1); // Copy the rest of the token
+					char* restOfToken = strdup(token + 1); 
 					tokenList = (char**) realloc(tokenList, (index + 2) * sizeof(char*));
 					if (tokenList == NULL) {
 						fprintf(stderr, "Memory allocation failed\n");
 						exit(EXIT_FAILURE);
 					}
-					tokenList[index++] = restOfToken; // Add the rest of the token to tokenList
+					tokenList[index++] = restOfToken; 
 				}
 			} else {
 				tokenList[index++] = strdup(interpretQuotes(strdup(token)));
 			}
 
-            i = strEnd - 1; // Move to the end of the current token
+            i = strEnd - 1; 
         }
     }
 
-    // Add NULL to the end
+    // Ajoute NULL pour marquer la fin du tableau
     tokenList = (char**) realloc(tokenList, (index + 1) * sizeof(char*));
     if (tokenList == NULL) {
         fprintf(stderr, "Memory allocation failed\n");
         exit(EXIT_FAILURE);
     }
     tokenList[index] = NULL;
-
+    
+    printf("\n");
+    for(int i = 0; tokenList[i] != NULL; i++){
+    	printf("%s ", tokenList[i]);
+    }
+    printf("\n");
+    
     return tokenList;
 }
-
-Env_variable* split(const char* str) {
-    int len_first_part = 0;
-
-    while (str[len_first_part] != '=' && str[len_first_part] != '\0') {
-        len_first_part++;
-    }
-
-    if (str[len_first_part] != '=') {
-        fprintf(stderr, "Error: The '=' character was not found in the string.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    Env_variable* env_variable = (Env_variable*) malloc(sizeof(Env_variable));
-    if (env_variable == NULL) {
-        fprintf(stderr, "Memory allocation failed for env_variable");
-        exit(EXIT_FAILURE);
-    }
-
-    env_variable->first_part = (char*) malloc((len_first_part + 1) * sizeof(char));
-    if (env_variable->first_part == NULL) {
-        fprintf(stderr, "Memory allocation failed for first_part");
-        free(env_variable);
-        exit(EXIT_FAILURE);
-    }
-
-    int len_second_part = strlen(str) - len_first_part - 1;
-    env_variable->second_part = (char*) malloc((len_second_part + 1) * sizeof(char));
-    if (env_variable->second_part == NULL) {
-        fprintf(stderr, "Memory allocation failed for second_part");
-        free(env_variable->first_part);
-        free(env_variable);
-        exit(EXIT_FAILURE);
-    }
-
-    strncpy(env_variable->first_part, str, len_first_part);
-    env_variable->first_part[len_first_part] = '\0';
-    
-    strcpy(env_variable->second_part, str + len_first_part + 1);
-    env_variable->second_part[len_second_part] = '\0'; 
-
-    return env_variable;
-}
-
-char* strndup(const char* s, size_t n) {
-    char* result;
-    size_t len = strlen(s);
-    
-    if (n < len) 
-    	len = n;
-    result = (char*) malloc(len + 1);
-    if (result == NULL) 
-    	return NULL;
-    result[len] = '\0';
-    return (char*) memcpy(result, s, len);
-}	   
-
